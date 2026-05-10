@@ -1,0 +1,15 @@
+{
+  "name": "barrix-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CORS-safe API proxy for Barrix IDE — routes to Poe and Gemini APIs",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod",
+    "deploy:preview": "vercel"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {}
+}
