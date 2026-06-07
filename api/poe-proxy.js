@@ -37,7 +37,7 @@ function corsHeaders(req) {
     "Access-Control-Allow-Origin": getAllowedOrigin(req),
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, X-Requested-With",
+      "Content-Type, Authorization, X-Requested-With, X-Client-Info, apikey",
     "Access-Control-Max-Age": "86400",
   };
 }
@@ -87,9 +87,17 @@ async function verifyAuth(req) {
       }
 
       // HMAC-SHA256 signature verification
+      let jwtSecretBytes;
+      try {
+        const padded = process.env.SUPABASE_JWT_SECRET.replace(/-/g, "+").replace(/_/g, "/");
+        const bin = atob(padded);
+        jwtSecretBytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+      } catch (e) {
+        jwtSecretBytes = new TextEncoder().encode(process.env.SUPABASE_JWT_SECRET);
+      }
       const key = await crypto.subtle.importKey(
         "raw",
-        new TextEncoder().encode(process.env.SUPABASE_JWT_SECRET),
+        jwtSecretBytes,
         { name: "HMAC", hash: "SHA-256" },
         false,
         ["verify"],
