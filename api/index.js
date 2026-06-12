@@ -42,7 +42,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Credentials': 'true',
 };
 
-const ALLOWED_ORIGINS = [
+let ALLOWED_ORIGINS = [
   'https://www.dustdelux.com',
   'https://dustdelux.com',
   'https://barrix.dustdelux.com',
@@ -559,7 +559,21 @@ const ROUTES = {
 // ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   try {
-    // 1. Protected CORS Injection
+    // 1. ABSOLUTE TOP-LEVEL CORS - Pulls from Env Variable first, falls back to hardcoded list if missing
+    const origin = req.headers.origin || '';
+    const ALLOWED = process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(',').map(url => url.trim())
+      : [
+          'https://www.dustdelux.com',
+          'https://dustdelux.com',
+          'https://barrix.dustdelux.com',
+          'https://crux.dustdelux.com',
+          'http://localhost:3000'
+        ];
+    // Overwrite the module-level list so downstream cors() uses the computed set
+    ALLOWED_ORIGINS = ALLOWED;
+
+    // 2. Protected CORS Injection
     cors(req, res);
     
     // 2. Handle Preflight Safely

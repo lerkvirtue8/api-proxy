@@ -2,6 +2,7 @@
   "name": "barrix-proxy",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "CORS-safe API proxy for Barrix IDE — routes to Poe and Gemini APIs",
   "scripts": {
     "dev": "vercel dev",
@@ -11,5 +12,8 @@
   "engines": {
     "node": ">=18"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.0",
+    "stripe": "^16.0.0"
+  }
 }
