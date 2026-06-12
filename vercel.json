@@ -1,18 +1,9 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
   "rewrites": [
-
     {
-      "source": "/api/poe-proxy",
-      "destination": "/api/poe-proxy"
-    },
-    {
-      "source": "/api/gemini",
-      "destination": "/api/gemini"
-    },
-    {
-      "source": "/api/health",
-      "destination": "/api/health"
+      "source": "/(.*)",
+      "destination": "/api/index.js"
     }
   ]
 }

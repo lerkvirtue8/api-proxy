@@ -42,31 +42,36 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Credentials': 'true',
 };
 
-// ─────────────────────────────────────────────────────────────
-// Master Domain Fleet Whitelist inside api/index.js
-// ─────────────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = [
   'https://www.dustdelux.com',
   'https://dustdelux.com',
   'https://barrix.dustdelux.com',
-  'https://crux.dustdelux.com',    // Added: Crux Multi-Tenant Engine
-  'http://localhost:3000',         // Safe fallback for local loops (Next.js/Vite)
-  'http://127.0.0.1:5500'          // Safe fallback for Live Server extensions
+  'https://crux.dustdelux.com',
+  'http://localhost:3000'
 ];
 
 function cors(req, res) {
-  const origin = req.headers.origin;
-  
-  // If the requesting domain is in our fleet, authorize it explicitly
-  if (ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    // Graceful fallback for non-credentialed public integrations
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  try {
+    const origin = req.headers.origin || '';
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    res.setHeader('Vary', 'Origin');
+    
+    // Fallback if CORS_HEADERS was accidentally stripped by previous agent tasks
+    const fallbackHeaders = {
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Client-Info, apikey, X-Auth-Tier, X-App-Id',
+      'Access-Control-Allow-Credentials': 'true'
+    };
+    
+    const headersToApply = typeof CORS_HEADERS !== 'undefined' ? CORS_HEADERS : fallbackHeaders;
+    Object.entries(headersToApply).forEach(([k, v]) => res.setHeader(k, v));
+  } catch (e) {
+    console.error('[cors] Header injection failed:', e.message);
   }
-
-  // Inject our critical custom client tracking headers
-  Object.entries(CORS_HEADERS).forEach(([k, v]) => res.setHeader(k, v));
 }
 
 function json(res, status, body) {
@@ -113,11 +118,21 @@ function getRequestUrl(req) {
 function getRequestPath(req) {
   const hintedPath = req.headers['x-matched-path'] || req.headers['x-invoke-path'] || req.headers['x-vercel-rewritten-path'];
   const requestUrl = getRequestUrl(req);
-  let resolvedPath = (hintedPath ? new URL(hintedPath, requestUrl.origin) : requestUrl).pathname;
+  let resolvedPath = (hintedPath && !hintedPath.includes('index') ? new URL(hintedPath, requestUrl.origin) : requestUrl).pathname;
   
-  // Normalize: Strip leading /api prefix context uniformly
+  // Collapse duplicate slashes and normalize prefixes completely
+  resolvedPath = resolvedPath.replace(/\/+/g, '/');
   resolvedPath = resolvedPath.replace(/^\/api/, '');
-  resolvedPath = resolvedPath.replace(/\/$/, '') || '/';
+  
+  // Keep the exact leading slash for matching our dictionary literal keys
+  if (!resolvedPath.startsWith('/')) {
+    resolvedPath = '/' + resolvedPath;
+  }
+  
+  // Strip a simple trailing slash unless it is the root path itself
+  if (resolvedPath !== '/' && resolvedPath.endsWith('/')) {
+    resolvedPath = resolvedPath.slice(0, -1);
+  }
   
   if (resolvedPath === '/index' || resolvedPath === '/index.js' || resolvedPath === '/') {
     if (requestUrl.searchParams.has('code') && (requestUrl.searchParams.has('state') || requestUrl.searchParams.has('error'))) {
@@ -397,7 +412,8 @@ async function routeAIProxy(req, res) {
     if (!data) return json(res, 403, { error: 'Access denied.' });
   }
 
-  const isGemini = getRequestPath(req).includes('gemini');
+  const currentPath = getRequestPath(req);
+  const isGemini = currentPath.includes('gemini');
   let targetUrl = '';
   let upstreamHeaders = { 'Content-Type': 'application/json' };
   let requestPayload = '';
@@ -542,21 +558,30 @@ const ROUTES = {
 // Main Execution Interceptor
 // ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  cors(req, res);
-  if (req.method === 'OPTIONS') {
-    res.setHeader('Content-Length', '2');
-    return res.status(200).send('OK');
-  }
-
-  const path = getRequestPath(req);
-  const routeHandler = ROUTES[path];
-  if (!routeHandler) return json(res, 404, { error: `Unknown route mapping: ${path}` });
-
   try {
+    // 1. Protected CORS Injection
+    cors(req, res);
+    
+    // 2. Handle Preflight Safely
+    if (req.method === 'OPTIONS') {
+      res.setHeader('Content-Length', '2');
+      return res.status(200).send('OK');
+    }
+
+    // 3. Resolve Route
+    const path = getRequestPath(req);
+    const routeHandler = ROUTES[path];
+    
+    if (!routeHandler) {
+      return res.status(404).json({ error: `Unknown route: ${path}` });
+    }
+    
     await routeHandler(req, res);
   } catch (err) {
-    console.error(`[barrix-api] Exception:`, err);
-    return json(res, 500, { error: 'Internal pipeline error' });
+    console.error('[barrix-api] FATAL PIPELINE CRASH:', err);
+    // Explicitly fallback header injection in case of a deep crash
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    return res.status(500).json({ error: 'Internal pipeline error', message: err.message });
   }
 }
 
