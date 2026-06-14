@@ -484,7 +484,15 @@ async function routeGitHubSaveToken(req, res) {
 
 async function routeEnableAuth(req, res) {
   const { appId, user_id } = req.body;
-  const { error: userErr } = await supabaseAppsAdmin.from('app_users').upsert({ app_id: appId, auth_user_id: user_id, role: 'creator' }, { onConflict: 'app_id,auth_user_id' });
+  const { data: existing } = await supabaseAppsAdmin.from('app_users').select('id').eq('app_id', appId).eq('auth_user_id', user_id).maybeSingle();
+  let userErr = null;
+  if (!existing) {
+    const { error: insErr } = await supabaseAppsAdmin.from('app_users').insert({ app_id: appId, auth_user_id: user_id, role: 'creator' });
+    userErr = insErr;
+  } else {
+    const { error: updErr } = await supabaseAppsAdmin.from('app_users').update({ role: 'creator' }).eq('app_id', appId).eq('auth_user_id', user_id);
+    userErr = updErr;
+  }
   if (userErr) return json(res, 500, { error: userErr.message });
   await supabaseAppsAdmin.from('gated_components').upsert({ app_id: appId, component_id: 'default', component_key: 'default', allowed_roles: ['creator', 'admin', 'user'] }, { onConflict: 'app_id,component_id' });
   return json(res, 200, { success: true });
